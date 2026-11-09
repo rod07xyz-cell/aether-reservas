@@ -1,0 +1,806 @@
+{
+  "name": "Fisio Movimiento · Panel API (reservas)",
+  "nodes": [
+    {
+      "id": "d70adae6-59ec-492f-87f2-945870a6117c",
+      "name": "GET panel-reservas",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "panel-reservas",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "http://localhost:8040,https://tu-clinica.es"
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_ID_CREDENCIAL_CLAVE_PANEL",
+          "name": "Clave del panel (X-Panel-Clave)"
+        }
+      },
+      "webhookId": "df9a3b4e-98ea-4728-9e9a-10616d1fb4b2"
+    },
+    {
+      "id": "a71c0037-0497-4d54-9534-db5b2372c595",
+      "name": "Reservas del rango",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_RESERVAS",
+          "cachedResultName": "reservas"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "inicio",
+              "condition": "gte",
+              "keyValue": "={{ $json.query.desde || $now.startOf(\"day\").toISO() }}"
+            },
+            {
+              "keyName": "inicio",
+              "condition": "lt",
+              "keyValue": "={{ $json.query.hasta || $now.startOf(\"day\").plus({ days: 1 }).toISO() }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "d7f37001-6dcf-4db1-bf93-6fbff422cc36",
+      "name": "Lista de espera activa",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_LISTA_ESPERA",
+          "cachedResultName": "lista_espera"
+        },
+        "matchType": "anyCondition",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "estado",
+              "condition": "eq",
+              "keyValue": "esperando"
+            },
+            {
+              "keyName": "estado",
+              "condition": "eq",
+              "keyValue": "ofrecido"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "a97a66c8-07da-4b7d-aa14-75bf26ae1ddb",
+      "name": "Preparar agenda",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Convierte las filas al formato del panel. Las reservas «anuladas» (duplicadas) no se muestran.\nconst hoy = DateTime.now().setZone('Europe/Madrid').toISODate();\nconst reservas = $('Reservas del rango').all().map(function (it) { return it.json; })\n  .filter(function (r) { return r.id && r.estado !== 'anulada'; })\n  .map(function (r) {\n    return { id: r.id, paciente: r.nombre, telefono: r.telefono || '', email: r.email || '', servicio: r.servicio, inicio: r.inicio,\n      hueco: r.hueco, estado: r.estado, origen: r.origen, notas: r.notas || '', creada: r.createdAt, cancelada_en: r.cancelada_en };\n  });\nconst espera = $('Lista de espera activa').all().map(function (it) { return it.json; })\n  .filter(function (e) { return e.id && e.dia >= hoy; })\n  .map(function (e) {\n    return { id: e.id, nombre: e.nombre, dia: e.dia, franja: e.franja, servicio: e.servicio, estado: e.estado,\n      hueco_ofrecido: e.hueco_ofrecido || '', oferta_caduca_en: e.oferta_caduca_en };\n  });\nreturn [{ json: { ok: true, reservas: reservas, espera: espera } }];"
+      }
+    },
+    {
+      "id": "4500d16e-7c9a-47af-9d50-173575b2c619",
+      "name": "Responder agenda",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "d0d90e0d-6703-4096-8f31-b3a922504e02",
+      "name": "POST panel-reservas-accion",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        360
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "panel-reservas-accion",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "http://localhost:8040,https://tu-clinica.es"
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_ID_CREDENCIAL_CLAVE_PANEL",
+          "name": "Clave del panel (X-Panel-Clave)"
+        }
+      },
+      "webhookId": "673ef703-2096-435d-aa6f-8555a99018c5"
+    },
+    {
+      "id": "432d9b25-bfa2-486b-836f-a84652a7c470",
+      "name": "Validar acción",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        360
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const b = $input.first().json.body || {};\nconst id = Number(b.id);\nconst accion = String(b.accion || '');\nconst ESTADO = { asistio: 'asistio', no_asistio: 'no_asistio', reabrir: 'confirmada' };\nlet ruta = 'error';\nif (Number.isInteger(id) && id > 0) {\n  if (accion === 'cancelar') ruta = 'cancelar';\n  else if (accion === 'notas') ruta = 'notas';\n  else if (ESTADO[accion]) ruta = 'estado';\n}\nreturn [{ json: { ruta: ruta, id: id, accion: accion, estado: ESTADO[accion] || '', notas: String(b.notas || '').replace(/[<>]/g, '').trim().slice(0, 300) } }];"
+      }
+    },
+    {
+      "id": "ec9fe0f9-0b83-4076-824a-cd27bd560e63",
+      "name": "Según la acción",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        480,
+        360
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "estado",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.ruta }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "estado"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "notas",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.ruta }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "notas"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "cancelar",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.ruta }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "cancelar"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "error",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.ruta }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "error"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3bf3b559-5027-469c-b1e1-9409f44ff43c",
+      "name": "Cambiar estado",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        240
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_RESERVAS",
+          "cachedResultName": "reservas"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            },
+            {
+              "keyName": "estado",
+              "condition": "neq",
+              "keyValue": "cancelada"
+            },
+            {
+              "keyName": "estado",
+              "condition": "neq",
+              "keyValue": "anulada"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "estado": "={{ $json.estado }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "estado",
+              "displayName": "estado",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "706ac736-e0e0-4efd-a631-ef0efc59f201",
+      "name": "Guardar notas",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        380
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_RESERVAS",
+          "cachedResultName": "reservas"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "notas": "={{ $json.notas }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "notas",
+              "displayName": "notas",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "6b2ed691-d8c1-47ff-84f4-08c4b907ac21",
+      "name": "Responder cambio guardado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: !!$json.id }) }}",
+        "options": {
+          "responseCode": "={{ $json.id ? 200 : 409 }}"
+        }
+      }
+    },
+    {
+      "id": "cbc4a9bf-4fd9-435f-b377-a6f8282bc7f7",
+      "name": "Cancelar reserva",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        720,
+        520
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_WORKFLOW_CANCELAR_RESERVA",
+          "cachedResultName": "Fisio Movimiento · Cancelar reserva (subworkflow)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "reserva_id": "={{ $json.id }}",
+            "quien": "clinica"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "reserva_id",
+              "displayName": "reserva_id",
+              "type": "number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "quien",
+              "displayName": "quien",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "aa4493e9-5d19-4022-ae40-a3e3e38f3e43",
+      "name": "Responder cancelación",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        960,
+        520
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.ok ? { ok: true, ofrecido: $json.ofrecido } : { ok: false, error: $json.motivo, message: ({ ya_cancelada: \"Esta cita ya estaba cancelada.\", pasada: \"No se puede cancelar una cita que ya ha pasado.\", no_encontrada: \"No existe esa cita.\" })[$json.motivo] || \"No se ha podido cancelar.\" }) }}",
+        "options": {
+          "responseCode": "={{ $json.ok ? 200 : 409 }}"
+        }
+      }
+    },
+    {
+      "id": "74ecfe30-0cad-4a64-9fbd-8960cd8c8980",
+      "name": "Responder: acción no válida",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        720,
+        660
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"ok\": false, \"error\": \"validation_error\", \"message\": \"Acción no válida.\" }",
+        "options": {
+          "responseCode": 400
+        }
+      }
+    },
+    {
+      "id": "5a8a5ca6-d0aa-49f7-80b9-3ea2399b6b9d",
+      "name": "POST panel-reservas-nueva",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        860
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "panel-reservas-nueva",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "http://localhost:8040,https://tu-clinica.es"
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_ID_CREDENCIAL_CLAVE_PANEL",
+          "name": "Clave del panel (X-Panel-Clave)"
+        }
+      },
+      "webhookId": "1b261291-ba73-4050-bfd3-225ae0cf8f53"
+    },
+    {
+      "id": "8f881d0f-a83d-4150-8c0e-9bcadcc86c7b",
+      "name": "Crear reserva",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        860
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_WORKFLOW_CREAR_RESERVA",
+          "cachedResultName": "Fisio Movimiento · Crear reserva (subworkflow)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "hueco": "={{ $json.body.hueco }}",
+            "servicio": "={{ $json.body.servicio }}",
+            "nombre": "={{ $json.body.paciente }}",
+            "email": "={{ $json.body.email || \"\" }}",
+            "telefono": "={{ $json.body.telefono || \"\" }}",
+            "origen": "panel",
+            "notas": ""
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "hueco",
+              "displayName": "hueco",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "servicio",
+              "displayName": "servicio",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "nombre",
+              "displayName": "nombre",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "origen",
+              "displayName": "origen",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notas",
+              "displayName": "notas",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "61d80e67-480b-4959-9492-2121f7c96851",
+      "name": "Responder cita nueva",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        480,
+        860
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.ok ? { ok: true, reserva_id: $json.reserva_id } : { ok: false, error: $json.motivo, message: ({ ocupado: \"Ese hueco ya está reservado. Elige otra hora.\", fuera_de_horario: \"Esa hora está fuera del horario de la clínica.\", demasiado_pronto: \"La cita tiene que ser en el futuro.\", demasiado_lejos: \"Solo se pueden dar citas a 30 días vista.\", servicio_no_valido: \"Elige un servicio de la lista.\", nombre_no_valido: \"Escribe el nombre del paciente.\", email_no_valido: \"El email no parece válido.\" })[$json.motivo] || \"No se ha podido guardar la cita.\" }) }}",
+        "options": {
+          "responseCode": "={{ $json.ok ? 200 : ($json.motivo === \"ocupado\" ? 409 : 400) }}"
+        }
+      }
+    },
+    {
+      "id": "20693f8b-513b-4af2-ac6a-22a11e8ee5c5",
+      "name": "Nota",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        180,
+        -240
+      ],
+      "parameters": {
+        "content": "## Panel API (reservas)\nTres endpoints protegidos con la cabecera `X-Panel-Clave` (credencial Header Auth):\n- `GET panel-reservas?desde&hasta`: agenda y lista de espera.\n- `POST panel-reservas-accion`: ha venido, no se presentó, volver a confirmada, notas o cancelar (cancelar ofrece el hueco a la lista).\n- `POST panel-reservas-nueva`: cita creada en recepción con la misma comprobación de hueco que la web.",
+        "color": 7,
+        "width": 620,
+        "height": 200
+      }
+    }
+  ],
+  "connections": {
+    "Reservas del rango": {
+      "main": [
+        [
+          {
+            "node": "Lista de espera activa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lista de espera activa": {
+      "main": [
+        [
+          {
+            "node": "Preparar agenda",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar agenda": {
+      "main": [
+        [
+          {
+            "node": "Responder agenda",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET panel-reservas": {
+      "main": [
+        [
+          {
+            "node": "Reservas del rango",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cambiar estado": {
+      "main": [
+        [
+          {
+            "node": "Responder cambio guardado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Según la acción": {
+      "main": [
+        [
+          {
+            "node": "Cambiar estado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Guardar notas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cancelar reserva",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder: acción no válida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar notas": {
+      "main": [
+        [
+          {
+            "node": "Responder cambio guardado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cancelar reserva": {
+      "main": [
+        [
+          {
+            "node": "Responder cancelación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar acción": {
+      "main": [
+        [
+          {
+            "node": "Según la acción",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST panel-reservas-accion": {
+      "main": [
+        [
+          {
+            "node": "Validar acción",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear reserva": {
+      "main": [
+        [
+          {
+            "node": "Responder cita nueva",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST panel-reservas-nueva": {
+      "main": [
+        [
+          {
+            "node": "Crear reserva",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

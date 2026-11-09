@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hueco libre para ti · Fisio Movimiento</title>
+  <meta name="robots" content="noindex">
+  <meta name="referrer" content="no-referrer">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%231F3A33'/%3E%3Ctext x='32' y='43' font-family='Palatino,Georgia,serif' font-size='32' text-anchor='middle' fill='%23C9A46A'%3EF%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="../comun/estilos.css?v=2">
+</head>
+<body>
+<div class="marco">
+  <aside class="rail">
+    <div class="rail__marca">
+      <span class="rail__sello" data-sello aria-hidden="true">F</span>
+      <div>
+        <p class="rail__nombre" data-clinica>Fisio Movimiento</p>
+        <p class="rail__dato" data-direccion></p>
+      </div>
+    </div>
+    <p class="rail__pie">¿Dudas? Llámanos al <span data-telefono></span><br><a data-privacidad href="#">Política de privacidad</a></p>
+  </aside>
+
+  <main class="contenido">
+    <p class="demo-aviso" data-demo hidden>Modo demostración: el hueco es inventado y no se reserva nada.</p>
+
+    <section data-vista="cargando"><p class="cargando">Buscando el hueco…</p></section>
+
+    <section data-vista="oferta" hidden>
+      <h1 id="ofertaTitulo">Se ha liberado un hueco para ti</h1>
+      <p class="entradilla">Alguien ha cancelado y te toca en la lista de espera. Si lo quieres, confírmalo antes de que termine el plazo; si no, pasará a la siguiente persona.</p>
+      <dl class="ticket">
+        <dt>Cuándo</dt><dd id="oCuando"></dd>
+        <dt>Servicio</dt><dd id="oServicio"></dd>
+        <dt>Te lo guardamos hasta las</dt>
+        <dd><span class="reloj"><span class="reloj__cifra" id="oHasta"></span><span class="reloj__texto" id="oQueda"></span></span></dd>
+      </dl>
+      <div class="botones">
+        <button class="boton" type="button" id="aceptar">Lo quiero</button>
+        <button class="boton boton--suave" type="button" id="rechazar">No me viene bien</button>
+      </div>
+      <p class="nota">«No me viene bien» te mantiene en la lista para otros huecos de ese día. <button type="button" class="enlace-boton" id="salir">Prefiero salir de la lista de espera</button></p>
+      <p class="aviso aviso--error" id="errorOferta" role="alert" hidden></p>
+    </section>
+
+    <section data-vista="aceptada" class="hecho" hidden>
+      <div class="hecho__sello" aria-hidden="true">
+        <svg width="30" height="30" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h1>Cita confirmada</h1>
+      <p class="entradilla">Te hemos enviado un email con los detalles y un enlace para cancelar si no puedes venir.</p>
+      <dl class="ticket">
+        <dt>Cuándo</dt><dd id="aCuando"></dd>
+        <dt>Servicio</dt><dd id="aServicio"></dd>
+        <dt>Dónde</dt><dd data-direccion></dd>
+      </dl>
+    </section>
+
+    <section data-vista="rechazada" class="hecho" hidden>
+      <h1 id="rechazadaTitulo">Hecho</h1>
+      <p class="entradilla" id="rechazadaTexto"></p>
+      <div class="botones"><a class="boton boton--suave" href="../reservar/">Ver otros huecos libres</a></div>
+    </section>
+
+    <section data-vista="error" hidden>
+      <h1 id="errorTitulo">Este enlace ya no sirve</h1>
+      <p class="entradilla" id="errorTexto"></p>
+      <div class="botones"><a class="boton boton--suave" href="../reservar/">Ver huecos libres</a></div>
+    </section>
+  </main>
+</div>
+
+<script src="../comun/config.js?v=2"></script>
+<script src="../comun/comun.js?v=2"></script>
+<script src="oferta.js?v=2"></script>
+</body>
+</html>

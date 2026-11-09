@@ -1,0 +1,579 @@
+{
+  "name": "Fisio Movimiento · Ofrecer hueco a la lista de espera (subworkflow)",
+  "nodes": [
+    {
+      "id": "3477f096-c042-4b6d-bd8f-f834a7aed6c2",
+      "name": "Al liberarse un hueco",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "hueco",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ab0ba69f-3582-452d-a7e9-68539279f14a",
+      "name": "Calcular plazo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// PLAZO PARA ACEPTAR: 2 horas, pero siempre termina 1 hora antes de la cita.\n// Si quedan menos de 15 minutos de plazo, el hueco no se ofrece (se queda libre en la web).\nconst ZONA = 'Europe/Madrid';\nconst PLAZO_HORAS = 2;\nconst MARGEN_ANTES_CITA_HORAS = 1;\nconst PLAZO_MINIMO_MIN = 15;\n\nconst hueco = String($input.first().json.hueco || '').trim();\nconst ini = DateTime.fromISO(hueco, { zone: ZONA });\nconst ahora = DateTime.now().setZone(ZONA);\nlet ofrecer = /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/.test(hueco) && ini.isValid;\nlet caduca = null;\nif (ofrecer) {\n  caduca = DateTime.min(ahora.plus({ hours: PLAZO_HORAS }), ini.minus({ hours: MARGEN_ANTES_CITA_HORAS }));\n  if (caduca < ahora.plus({ minutes: PLAZO_MINIMO_MIN })) ofrecer = false;\n}\nreturn [{ json: {\n  ofrecer: ofrecer,\n  hueco: hueco,\n  dia: ofrecer ? ini.toISODate() : '',\n  franja: ofrecer ? (ini.hour < 14 ? 'manana' : 'tarde') : '',\n  caduca: caduca ? caduca.toUTC().toISO() : '',\n  caduca_texto: caduca ? caduca.setLocale('es').toFormat(\"HH:mm 'del' cccc d\") : '',\n  fecha_texto: ofrecer ? ini.setLocale('es').toFormat(\"cccc d 'de' LLLL 'a las' HH:mm\") : ''\n} }];"
+      }
+    },
+    {
+      "id": "ef860991-ded2-4c71-887b-ef5e92bef8a3",
+      "name": "¿Hay tiempo para ofrecerlo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ofrecer }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "82b45255-e1f7-45dd-b253-16d92aa51c60",
+      "name": "¿Ya está reservado?",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_RESERVAS",
+          "cachedResultName": "reservas"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "hueco",
+              "condition": "eq",
+              "keyValue": "={{ $json.hueco }}"
+            },
+            {
+              "keyName": "estado",
+              "condition": "eq",
+              "keyValue": "confirmada"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "e989f2f5-e234-4bdc-9137-79fff16f1b1d",
+      "name": "¿Ya está ofrecido?",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_LISTA_ESPERA",
+          "cachedResultName": "lista_espera"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "hueco_ofrecido",
+              "condition": "eq",
+              "keyValue": "={{ $('Calcular plazo').item.json.hueco }}"
+            },
+            {
+              "keyName": "estado",
+              "condition": "eq",
+              "keyValue": "ofrecido"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "c6d96598-f343-4351-bbeb-f1461f227ae2",
+      "name": "Lista de espera de ese día",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_LISTA_ESPERA",
+          "cachedResultName": "lista_espera"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "dia",
+              "condition": "eq",
+              "keyValue": "={{ $('Calcular plazo').item.json.dia }}"
+            },
+            {
+              "keyName": "estado",
+              "condition": "eq",
+              "keyValue": "esperando"
+            }
+          ]
+        },
+        "returnAll": true,
+        "orderBy": true,
+        "orderByColumn": "id",
+        "orderByDirection": "ASC"
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "359d20b9-6a0e-4574-9e0d-4c1a23ad9263",
+      "name": "Elegir siguiente de la lista",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Por orden de alta (ID más bajo), solo quien aceptó esa franja y no ha descartado ya este hueco.\nconst p = $('Calcular plazo').first().json;\nconst reservado = !!$('¿Ya está reservado?').first().json.id;\nconst ofrecido = !!$('¿Ya está ofrecido?').first().json.id;\nlet elegido = null;\nif (!reservado && !ofrecido) {\n  const filas = $('Lista de espera de ese día').all().map(function (it) { return it.json; }).filter(function (f) { return f.id; });\n  filas.sort(function (a, b) { return a.id - b.id; });\n  for (let i = 0; i < filas.length; i++) {\n    const f = filas[i];\n    const descartados = String(f.huecos_descartados || '').split(',');\n    if ((f.franja === 'cualquiera' || f.franja === p.franja) && descartados.indexOf(p.hueco) < 0) { elegido = f; break; }\n  }\n}\nreturn [{ json: {\n  hay: !!elegido,\n  motivo: reservado ? 'ya_reservado' : (ofrecido ? 'ya_ofrecido' : (elegido ? '' : 'nadie_en_lista')),\n  espera_id: elegido ? elegido.id : 0,\n  nombre: elegido ? elegido.nombre : '',\n  email: elegido ? elegido.email : '',\n  servicio: elegido ? elegido.servicio : '',\n  hueco: p.hueco,\n  caduca: p.caduca,\n  caduca_texto: p.caduca_texto,\n  fecha_texto: p.fecha_texto\n} }];"
+      }
+    },
+    {
+      "id": "da847bfe-f634-404a-a64c-9d9aea94c5a2",
+      "name": "¿Hay alguien?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.hay }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "816189a3-eaf3-46e4-8dc8-f63bdfd68d73",
+      "name": "Generar token de la oferta",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        100
+      ],
+      "parameters": {
+        "action": "generate",
+        "encodingType": "uuid",
+        "dataPropertyName": "token"
+      }
+    },
+    {
+      "id": "d3323103-99ad-4328-8b3f-e76305712e21",
+      "name": "Marcar como ofrecido",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        100
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_LISTA_ESPERA",
+          "cachedResultName": "lista_espera"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Elegir siguiente de la lista').item.json.espera_id }}"
+            },
+            {
+              "keyName": "estado",
+              "condition": "eq",
+              "keyValue": "esperando"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "estado": "ofrecido",
+            "token_oferta": "={{ $json.token }}",
+            "hueco_ofrecido": "={{ $('Elegir siguiente de la lista').item.json.hueco }}",
+            "oferta_caduca_en": "={{ $('Elegir siguiente de la lista').item.json.caduca }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "estado",
+              "displayName": "estado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "token_oferta",
+              "displayName": "token_oferta",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hueco_ofrecido",
+              "displayName": "hueco_ofrecido",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "oferta_caduca_en",
+              "displayName": "oferta_caduca_en",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5ead3e87-251c-4608-9274-b350a10c668f",
+      "name": "Ofrecer el hueco por email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2200,
+        100
+      ],
+      "parameters": {
+        "operation": "send",
+        "fromEmail": "Fisio Movimiento <hola@tu-clinica.es>",
+        "toEmail": "={{ $('Elegir siguiente de la lista').item.json.email }}",
+        "subject": "=Se ha liberado un hueco: {{ $('Elegir siguiente de la lista').item.json.fecha_texto }}",
+        "emailFormat": "html",
+        "html": "=<div style=\"font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#1f2a2e;max-width:560px\"><h2 style=\"margin:0 0 12px;color:#2f5d50\">Tienes un hueco reservado para ti</h2><p>Hola, {{ $('Elegir siguiente de la lista').item.json.nombre }}:</p><p>Alguien ha cancelado y el hueco del <b>{{ $('Elegir siguiente de la lista').item.json.fecha_texto }}</b> es tuyo si lo quieres ({{ $('Elegir siguiente de la lista').item.json.servicio }}).</p><p>Te lo guardamos hasta las <b>{{ $('Elegir siguiente de la lista').item.json.caduca_texto }}</b>. Después pasará a la siguiente persona de la lista.</p><p><a href=\"https://tu-clinica.es/reservas/oferta/?t={{ $('Generar token de la oferta').item.json.token }}\" style=\"display:inline-block;background:#2f5d50;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px\">Ver el hueco y responder</a></p><p style=\"color:#5b6b70;font-size:13px\">Abrir el enlace no reserva nada: la cita solo se confirma si pulsas «Lo quiero» en la página. El enlace sirve una sola vez.</p><p>Un saludo,<br>Fisio Movimiento</p></div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "smtp": {
+          "id": "CONFIGURAR_ID_CREDENCIAL_SMTP",
+          "name": "SMTP de la clínica"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "66df1a4b-5d40-4da8-9fa7-a2b71f88291e"
+    },
+    {
+      "id": "33274022-252b-449d-bf1b-65f60d8ec50e",
+      "name": "Resultado: ofrecido",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2420,
+        100
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ofrecido",
+              "name": "ofrecido",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "espera_id",
+              "name": "espera_id",
+              "value": "={{ $('Elegir siguiente de la lista').item.json.espera_id }}",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "2f8fdaec-73ea-4a03-9435-eb7c3441f800",
+      "name": "Resultado: sin oferta",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ofrecido",
+              "name": "ofrecido",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "motivo",
+              "name": "motivo",
+              "value": "={{ $json.motivo || \"sin_plazo\" }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f72f64e5-bf8f-4125-90dd-e69532f659f0",
+      "name": "Nota",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        180,
+        -40
+      ],
+      "parameters": {
+        "content": "## Ofrecer hueco (subworkflow)\nSe llama al cancelar una cita, al rechazar o caducar una oferta y desde el panel.\n\n1. Plazo: 2 h, y como tarde 1 h antes de la cita.\n2. Si el hueco ya está reservado u ofrecido, no hace nada.\n3. Elige al primero de la lista de ese día (ID más bajo) con la franja compatible y que no lo haya descartado.\n4. Lo marca `ofrecido` con un token de un solo uso y le envía el email.",
+        "color": 7,
+        "width": 600,
+        "height": 220
+      }
+    }
+  ],
+  "connections": {
+    "Al liberarse un hueco": {
+      "main": [
+        [
+          {
+            "node": "Calcular plazo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Ya está reservado?": {
+      "main": [
+        [
+          {
+            "node": "¿Ya está ofrecido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Ya está ofrecido?": {
+      "main": [
+        [
+          {
+            "node": "Lista de espera de ese día",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lista de espera de ese día": {
+      "main": [
+        [
+          {
+            "node": "Elegir siguiente de la lista",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar token de la oferta": {
+      "main": [
+        [
+          {
+            "node": "Marcar como ofrecido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar como ofrecido": {
+      "main": [
+        [
+          {
+            "node": "Ofrecer el hueco por email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ofrecer el hueco por email": {
+      "main": [
+        [
+          {
+            "node": "Resultado: ofrecido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay alguien?": {
+      "main": [
+        [
+          {
+            "node": "Generar token de la oferta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resultado: sin oferta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Elegir siguiente de la lista": {
+      "main": [
+        [
+          {
+            "node": "¿Hay alguien?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay tiempo para ofrecerlo?": {
+      "main": [
+        [
+          {
+            "node": "¿Ya está reservado?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resultado: sin oferta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular plazo": {
+      "main": [
+        [
+          {
+            "node": "¿Hay tiempo para ofrecerlo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

@@ -1,0 +1,360 @@
+{
+  "name": "Fisio Movimiento · Caducidad de ofertas de la lista de espera",
+  "nodes": [
+    {
+      "id": "8f170d4b-90f7-439c-a764-0af9d4a2059e",
+      "name": "Cada 10 minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "7df94073-f33f-4129-88bc-f0b3e19a0d1a",
+      "name": "Ofertas caducadas",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_LISTA_ESPERA",
+          "cachedResultName": "lista_espera"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "estado",
+              "condition": "eq",
+              "keyValue": "ofrecido"
+            },
+            {
+              "keyName": "oferta_caduca_en",
+              "condition": "lt",
+              "keyValue": "={{ $now.toUTC().toISO() }}"
+            }
+          ]
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "183251b0-d0e3-4f12-a616-7c01d80448e9",
+      "name": "Devolver a la lista",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_LISTA_ESPERA",
+          "cachedResultName": "lista_espera"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            },
+            {
+              "keyName": "estado",
+              "condition": "eq",
+              "keyValue": "ofrecido"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "estado": "esperando",
+            "token_oferta": "",
+            "hueco_ofrecido": "",
+            "huecos_descartados": "={{ ($json.huecos_descartados ? $json.huecos_descartados + \",\" : \"\") + $json.hueco_ofrecido }}",
+            "notas": "Oferta caducada sin respuesta"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "estado",
+              "displayName": "estado",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "token_oferta",
+              "displayName": "token_oferta",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hueco_ofrecido",
+              "displayName": "hueco_ofrecido",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "huecos_descartados",
+              "displayName": "huecos_descartados",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notas",
+              "displayName": "notas",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f61b78a4-3e50-466a-af1d-d9c027c72008",
+      "name": "Ofrecer al siguiente",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        720,
+        200
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_WORKFLOW_OFRECER_HUECO",
+          "cachedResultName": "Fisio Movimiento · Ofrecer hueco a la lista de espera (subworkflow)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "hueco": "={{ $('Ofertas caducadas').item.json.hueco_ofrecido }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "hueco",
+              "displayName": "hueco",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "63ff3fb0-2c70-447c-b78b-ff3b1206fb47",
+      "name": "Esperas de días pasados",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        440
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_LISTA_ESPERA",
+          "cachedResultName": "lista_espera"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "estado",
+              "condition": "eq",
+              "keyValue": "esperando"
+            },
+            {
+              "keyName": "dia",
+              "condition": "lt",
+              "keyValue": "={{ $now.setZone(\"Europe/Madrid\").toISODate() }}"
+            }
+          ]
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "1431d8fb-6331-49d8-8247-db66821a7025",
+      "name": "Cerrar esperas pasadas",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        440
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_LISTA_ESPERA",
+          "cachedResultName": "lista_espera"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "estado": "caducada",
+            "notas": "El día ya pasó sin hueco libre"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "estado",
+              "displayName": "estado",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notas",
+              "displayName": "notas",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "4886d4f7-1a8b-427e-b082-fca741a66e9f",
+      "name": "Nota",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        180,
+        0
+      ],
+      "parameters": {
+        "content": "## Caducidad de ofertas\nCada 10 minutos:\n1. Las ofertas sin respuesta cuyo plazo terminó vuelven a `esperando` (con ese hueco descartado) y el hueco se ofrece al siguiente.\n2. Las esperas de días que ya pasaron se cierran como `caducada`.",
+        "color": 7,
+        "width": 560,
+        "height": 170
+      }
+    }
+  ],
+  "connections": {
+    "Ofertas caducadas": {
+      "main": [
+        [
+          {
+            "node": "Devolver a la lista",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Devolver a la lista": {
+      "main": [
+        [
+          {
+            "node": "Ofrecer al siguiente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cada 10 minutos": {
+      "main": [
+        [
+          {
+            "node": "Ofertas caducadas",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Esperas de días pasados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Esperas de días pasados": {
+      "main": [
+        [
+          {
+            "node": "Cerrar esperas pasadas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

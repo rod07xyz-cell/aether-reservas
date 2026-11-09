@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tu cita · Fisio Movimiento</title>
+  <meta name="robots" content="noindex">
+  <meta name="referrer" content="no-referrer">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%231F3A33'/%3E%3Ctext x='32' y='43' font-family='Palatino,Georgia,serif' font-size='32' text-anchor='middle' fill='%23C9A46A'%3EF%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="../comun/estilos.css?v=2">
+</head>
+<body>
+<div class="marco">
+  <aside class="rail">
+    <div class="rail__marca">
+      <span class="rail__sello" data-sello aria-hidden="true">F</span>
+      <div>
+        <p class="rail__nombre" data-clinica>Fisio Movimiento</p>
+        <p class="rail__dato" data-direccion></p>
+      </div>
+    </div>
+    <p class="rail__pie">¿Dudas? Llámanos al <span data-telefono></span><br><a data-privacidad href="#">Política de privacidad</a></p>
+  </aside>
+
+  <main class="contenido">
+    <p class="demo-aviso" data-demo hidden>Modo demostración: la cita es inventada y no se cancela nada de verdad.</p>
+
+    <section data-vista="cargando"><p class="cargando">Buscando tu cita…</p></section>
+
+    <section data-vista="cita" hidden>
+      <h1 id="citaTitulo">Tu cita</h1>
+      <p class="entradilla" id="citaTexto"></p>
+      <dl class="ticket">
+        <dt>Cuándo</dt><dd id="cCuando"></dd>
+        <dt>Servicio</dt><dd id="cServicio"></dd>
+        <dt>Dónde</dt><dd data-direccion></dd>
+      </dl>
+      <div id="zonaCancelar" hidden>
+        <div class="botones" id="paso1"><button class="boton boton--peligro" type="button" id="pedirCancelar">Cancelar mi cita</button></div>
+        <div class="bloque aparece" id="paso2" hidden style="margin-top:20px">
+          <h2 class="bloque__titulo">¿Cancelamos la cita?</h2>
+          <p class="bloque__texto">El hueco se ofrecerá a la siguiente persona de la lista de espera. Si luego quieres otra cita, tendrás que reservarla de nuevo.</p>
+          <div class="botones" style="margin-top:0">
+            <button class="boton boton--peligro" type="button" id="confirmarCancelar">Sí, cancelar la cita</button>
+            <button class="boton boton--suave" type="button" id="noCancelar">No, mantenerla</button>
+          </div>
+        </div>
+        <p class="aviso aviso--error" id="errorCancelar" role="alert" hidden></p>
+      </div>
+    </section>
+
+    <section data-vista="cancelada" class="hecho" hidden>
+      <div class="hecho__sello" aria-hidden="true">
+        <svg width="30" height="30" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h1>Cita cancelada</h1>
+      <p class="entradilla" id="canceladaTexto">Gracias por avisar: el hueco pasa a la lista de espera. Te hemos enviado un email de confirmación.</p>
+      <div class="botones"><a class="boton boton--suave" href="../reservar/">Pedir otra cita</a></div>
+    </section>
+
+    <section data-vista="error" hidden>
+      <h1>No encontramos esta cita</h1>
+      <p class="entradilla" id="errorTexto">Este enlace no es válido. Comprueba que lo has copiado entero desde el email.</p>
+      <div class="botones"><a class="boton boton--suave" href="../reservar/">Ir a la página de reservas</a></div>
+    </section>
+  </main>
+</div>
+
+<script src="../comun/config.js?v=2"></script>
+<script src="../comun/comun.js?v=2"></script>
+<script src="gestionar.js?v=2"></script>
+</body>
+</html>

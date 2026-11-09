@@ -1,0 +1,857 @@
+{
+  "name": "Fisio Movimiento · Crear reserva (subworkflow)",
+  "nodes": [
+    {
+      "id": "7c285b97-d522-4b21-9384-40750035a0f7",
+      "name": "Al pedir una reserva",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "hueco",
+              "type": "string"
+            },
+            {
+              "name": "servicio",
+              "type": "string"
+            },
+            {
+              "name": "nombre",
+              "type": "string"
+            },
+            {
+              "name": "email",
+              "type": "string"
+            },
+            {
+              "name": "telefono",
+              "type": "string"
+            },
+            {
+              "name": "origen",
+              "type": "string"
+            },
+            {
+              "name": "notas",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a823c984-06ad-474c-a8d5-868d5604f4b8",
+      "name": "Validar hueco",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// CONFIGURACIÓN DE LA CLÍNICA: horario, servicios y web de las páginas.\n// Si cambias el horario o los servicios, cámbialos también en «API de reservas» (nodo «Calcular huecos» y «Validar petición»).\nconst H = {\n  zona: 'Europe/Madrid',\n  dias: [1, 2, 3, 4, 5],\n  horas: ['09:00', '10:00', '11:00', '12:00', '13:00', '16:00', '17:00', '18:00', '19:00'],\n  duracionMin: 45,\n  antelacionMinHoras: { web: 2, lista_espera: 1, panel: 0 },\n  diasVista: 30,\n  festivos: [],\n  servicios: ['Fisioterapia general', 'Fisioterapia deportiva', 'Suelo pélvico', 'Punción seca', 'Pilates terapéutico', 'Primera valoración'],\n  webBase: 'https://tu-clinica.es/reservas'\n};\n\nconst e = $input.first().json;\nconst limpiar = function (v, max) { return String(v == null ? '' : v).replace(/[<>]/g, '').trim().slice(0, max); };\nconst hueco = limpiar(e.hueco, 16);\nconst origen = ['web', 'lista_espera', 'panel'].indexOf(e.origen) >= 0 ? e.origen : 'web';\nlet motivo = '';\nlet ini = null;\nif (!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/.test(hueco)) {\n  motivo = 'hueco_no_valido';\n} else {\n  ini = DateTime.fromISO(hueco, { zone: H.zona });\n  const ahora = DateTime.now().setZone(H.zona);\n  if (!ini.isValid) motivo = 'hueco_no_valido';\n  else if (H.dias.indexOf(ini.weekday) < 0 || H.horas.indexOf(ini.toFormat('HH:mm')) < 0 || H.festivos.indexOf(ini.toISODate()) >= 0) motivo = 'fuera_de_horario';\n  else if (ini < ahora.plus({ hours: H.antelacionMinHoras[origen] })) motivo = 'demasiado_pronto';\n  else if (ini > ahora.plus({ days: H.diasVista }).endOf('day')) motivo = 'demasiado_lejos';\n}\nconst servicio = limpiar(e.servicio, 80);\nif (!motivo && H.servicios.indexOf(servicio) < 0) motivo = 'servicio_no_valido';\nconst nombre = limpiar(e.nombre, 80);\nif (!motivo && nombre.length < 2) motivo = 'nombre_no_valido';\nconst email = limpiar(e.email, 120).toLowerCase();\nif (!motivo && email && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) motivo = 'email_no_valido';\nconst valido = !motivo;\nconst inicio = valido ? ini : null;\nreturn [{ json: {\n  valido: valido,\n  motivo: motivo,\n  hueco: hueco,\n  inicio: inicio ? inicio.toISO() : '',\n  fin: inicio ? inicio.plus({ minutes: H.duracionMin }).toISO() : '',\n  fecha_texto: inicio ? inicio.setLocale('es').toFormat(\"cccc d 'de' LLLL 'a las' HH:mm\") : '',\n  servicio: servicio,\n  nombre: nombre,\n  email: email,\n  telefono: limpiar(e.telefono, 20).replace(/[^0-9+]/g, ''),\n  origen: origen,\n  notas: limpiar(e.notas, 500),\n  web_base: H.webBase\n} }];"
+      }
+    },
+    {
+      "id": "8ba45897-010a-46b7-9c25-24aade36e49c",
+      "name": "¿Hueco válido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.valido }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "8409527b-8fd1-4c86-b85d-edc2d3b80491",
+      "name": "Resultado: no válido",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        660,
+        520
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ok",
+              "name": "ok",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "motivo",
+              "name": "motivo",
+              "value": "={{ $json.motivo }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b87e759d-8498-49d5-9505-dc3406a442d3",
+      "name": "Generar token de gestión",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        660,
+        200
+      ],
+      "parameters": {
+        "action": "generate",
+        "encodingType": "uuid",
+        "dataPropertyName": "token"
+      }
+    },
+    {
+      "id": "7a76a50f-314b-4e6e-b074-5ac8f976ee20",
+      "name": "Guardar reserva",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_RESERVAS",
+          "cachedResultName": "reservas"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "hueco": "={{ $('Validar hueco').item.json.hueco }}",
+            "inicio": "={{ $('Validar hueco').item.json.inicio }}",
+            "servicio": "={{ $('Validar hueco').item.json.servicio }}",
+            "nombre": "={{ $('Validar hueco').item.json.nombre }}",
+            "email": "={{ $('Validar hueco').item.json.email }}",
+            "telefono": "={{ $('Validar hueco').item.json.telefono }}",
+            "estado": "confirmada",
+            "origen": "={{ $('Validar hueco').item.json.origen }}",
+            "token": "={{ $json.token }}",
+            "gcal_event_id": "",
+            "notas": "={{ $('Validar hueco').item.json.notas }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "hueco",
+              "displayName": "hueco",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "inicio",
+              "displayName": "inicio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "servicio",
+              "displayName": "servicio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "nombre",
+              "displayName": "nombre",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "estado",
+              "displayName": "estado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "origen",
+              "displayName": "origen",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "token",
+              "displayName": "token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "gcal_event_id",
+              "displayName": "gcal_event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notas",
+              "displayName": "notas",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "768e0230-08a2-46b8-806c-172875f43f88",
+      "name": "Primera reserva del hueco",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_RESERVAS",
+          "cachedResultName": "reservas"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "hueco",
+              "condition": "eq",
+              "keyValue": "={{ $('Validar hueco').item.json.hueco }}"
+            },
+            {
+              "keyName": "estado",
+              "condition": "eq",
+              "keyValue": "confirmada"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1,
+        "orderBy": true,
+        "orderByColumn": "id",
+        "orderByDirection": "ASC"
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "bab1594b-9031-429c-9105-09ada263c0c8",
+      "name": "¿Es la primera?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              },
+              "rightValue": "={{ $('Guardar reserva').item.json.id }}"
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "8698d1c3-a285-4467-ba0e-45062552187b",
+      "name": "Anular reserva duplicada",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        480
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_RESERVAS",
+          "cachedResultName": "reservas"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Guardar reserva').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "estado": "anulada",
+            "notas": "Otra persona reservó el mismo hueco a la vez"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "estado",
+              "displayName": "estado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notas",
+              "displayName": "notas",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "8e2cda11-0e9b-4661-8dc7-b709710c71aa",
+      "name": "Resultado: ocupado",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
+        480
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ok",
+              "name": "ok",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "motivo",
+              "name": "motivo",
+              "value": "ocupado",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "c99625a0-371f-4b6e-8a1e-a8aa37fa03d9",
+      "name": "Copiar en Google Calendar",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1540,
+        200
+      ],
+      "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_CALENDARIO"
+        },
+        "start": "={{ $('Validar hueco').item.json.inicio }}",
+        "end": "={{ $('Validar hueco').item.json.fin }}",
+        "useDefaultReminders": true,
+        "additionalFields": {
+          "summary": "={{ $('Validar hueco').item.json.servicio }} · {{ $('Validar hueco').item.json.nombre }}",
+          "description": "=Reserva n.º {{ $('Guardar reserva').item.json.id }} ({{ { web: 'página web', lista_espera: 'lista de espera', panel: 'panel de recepción' }[$('Validar hueco').item.json.origen] }})\nTeléfono: {{ $('Validar hueco').item.json.telefono || '—' }}\nEmail: {{ $('Validar hueco').item.json.email || '—' }}\n\nCreada automáticamente. Para cancelar, usa el panel de recepción: así el hueco pasa a la lista de espera.",
+          "location": "Fisio Movimiento",
+          "sendUpdates": "none"
+        }
+      },
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "CONFIGURAR_ID_CREDENCIAL_GOOGLE_CALENDAR",
+          "name": "Google Calendar de la clínica"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "abbb406b-0610-4645-886e-b9ce4af62968",
+      "name": "Guardar ID del evento",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1760,
+        200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_RESERVAS",
+          "cachedResultName": "reservas"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Guardar reserva').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "gcal_event_id": "={{ $json.id || \"\" }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "gcal_event_id",
+              "displayName": "gcal_event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "44be5219-9277-42e5-9cee-2b0a1932119e",
+      "name": "¿Tiene email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1980,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Validar hueco').item.json.email }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "8032c727-e35d-4912-b67c-32582bc64485",
+      "name": "Confirmar al paciente",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2200,
+        100
+      ],
+      "parameters": {
+        "operation": "send",
+        "fromEmail": "Fisio Movimiento <hola@tu-clinica.es>",
+        "toEmail": "={{ $('Validar hueco').item.json.email }}",
+        "subject": "=Cita confirmada: {{ $('Validar hueco').item.json.fecha_texto }}",
+        "emailFormat": "html",
+        "html": "=<div style=\"font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#1f2a2e;max-width:560px\"><h2 style=\"margin:0 0 12px;color:#2f5d50\">Tu cita está confirmada</h2><p>Hola, {{ $('Validar hueco').item.json.nombre }}:</p><p>Te esperamos el <b>{{ $('Validar hueco').item.json.fecha_texto }}</b> para <b>{{ $('Validar hueco').item.json.servicio }}</b> en Fisio Movimiento.</p><p>Si no puedes venir, cancélala desde este enlace para que otra persona pueda aprovechar el hueco:</p><p><a href=\"{{ $('Validar hueco').item.json.web_base }}/gestionar/?t={{ $('Guardar reserva').item.json.token }}\" style=\"display:inline-block;background:#2f5d50;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px\">Ver o cancelar mi cita</a></p><p style=\"color:#5b6b70;font-size:13px\">Abrir el enlace no cancela nada: la cita solo se cancela si pulsas el botón de la página.</p><p>Un saludo,<br>Fisio Movimiento</p></div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "smtp": {
+          "id": "CONFIGURAR_ID_CREDENCIAL_SMTP",
+          "name": "SMTP de la clínica"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "ac3cfb95-24f2-470e-aea1-840bf1d06328"
+    },
+    {
+      "id": "f9247d22-23c8-41a9-8d3d-5e6a0f9d9963",
+      "name": "Avisar a la clínica",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2420,
+        200
+      ],
+      "parameters": {
+        "operation": "send",
+        "fromEmail": "Fisio Movimiento <hola@tu-clinica.es>",
+        "toEmail": "hola@tu-clinica.es",
+        "subject": "=Nueva reserva: {{ $('Validar hueco').item.json.fecha_texto }} · {{ $('Validar hueco').item.json.nombre }}",
+        "emailFormat": "html",
+        "html": "=<div style=\"font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#1f2a2e;max-width:560px\"><h2 style=\"margin:0 0 12px\">Nueva reserva ({{ { web: \"página web\", lista_espera: \"lista de espera\", panel: \"panel de recepción\" }[$('Validar hueco').item.json.origen] }})</h2><p><b>Cuándo:</b> {{ $('Validar hueco').item.json.fecha_texto }}</p><p><b>Servicio:</b> {{ $('Validar hueco').item.json.servicio }}</p><p><b>Paciente:</b> {{ $('Validar hueco').item.json.nombre }} · {{ $('Validar hueco').item.json.email || \"sin email\" }} · {{ $('Validar hueco').item.json.telefono || \"sin teléfono\" }}</p><p style=\"color:#5b6b70;font-size:13px\">Reserva n.º {{ $('Guardar reserva').item.json.id }}. También está en el calendario de la clínica.</p></div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "smtp": {
+          "id": "CONFIGURAR_ID_CREDENCIAL_SMTP",
+          "name": "SMTP de la clínica"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "e48423be-6ff4-4e73-a115-fcb17f1536c6"
+    },
+    {
+      "id": "70755a3d-27db-4552-9827-d10f56999e7b",
+      "name": "Resultado: reservada",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2640,
+        200
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ok",
+              "name": "ok",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "motivo",
+              "name": "motivo",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "reserva_id",
+              "name": "reserva_id",
+              "value": "={{ $('Guardar reserva').item.json.id }}",
+              "type": "number"
+            },
+            {
+              "id": "token",
+              "name": "token",
+              "value": "={{ $('Guardar reserva').item.json.token }}",
+              "type": "string"
+            },
+            {
+              "id": "hueco",
+              "name": "hueco",
+              "value": "={{ $('Validar hueco').item.json.hueco }}",
+              "type": "string"
+            },
+            {
+              "id": "fecha_texto",
+              "name": "fecha_texto",
+              "value": "={{ $('Validar hueco').item.json.fecha_texto }}",
+              "type": "string"
+            },
+            {
+              "id": "servicio",
+              "name": "servicio",
+              "value": "={{ $('Validar hueco').item.json.servicio }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "6c97cc91-1db0-4737-8657-1c34e3621e3e",
+      "name": "Nota",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        180,
+        -100
+      ],
+      "parameters": {
+        "content": "## Crear reserva (subworkflow)\nLo usan la página de reserva, la lista de espera y el panel.\n\n**Insertar y comprobar:** se guarda la reserva y se relee la primera reserva confirmada de ese hueco (ID más bajo). Si no es la nuestra, otra persona reservó a la vez: la nuestra se anula y se devuelve `motivo: ocupado`.\n\nLa reserva ganadora se copia en Google Calendar (si Google falla, la reserva sigue adelante).\n\nDevuelve `{ ok, motivo, reserva_id, token, hueco, fecha_texto, servicio }`.",
+        "color": 7,
+        "width": 560,
+        "height": 260
+      }
+    }
+  ],
+  "connections": {
+    "Al pedir una reserva": {
+      "main": [
+        [
+          {
+            "node": "Validar hueco",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar token de gestión": {
+      "main": [
+        [
+          {
+            "node": "Guardar reserva",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar reserva": {
+      "main": [
+        [
+          {
+            "node": "Primera reserva del hueco",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Copiar en Google Calendar": {
+      "main": [
+        [
+          {
+            "node": "Guardar ID del evento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirmar al paciente": {
+      "main": [
+        [
+          {
+            "node": "Avisar a la clínica",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avisar a la clínica": {
+      "main": [
+        [
+          {
+            "node": "Resultado: reservada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Tiene email?": {
+      "main": [
+        [
+          {
+            "node": "Confirmar al paciente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Avisar a la clínica",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar ID del evento": {
+      "main": [
+        [
+          {
+            "node": "¿Tiene email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es la primera?": {
+      "main": [
+        [
+          {
+            "node": "Copiar en Google Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Anular reserva duplicada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anular reserva duplicada": {
+      "main": [
+        [
+          {
+            "node": "Resultado: ocupado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Primera reserva del hueco": {
+      "main": [
+        [
+          {
+            "node": "¿Es la primera?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hueco válido?": {
+      "main": [
+        [
+          {
+            "node": "Generar token de gestión",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resultado: no válido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar hueco": {
+      "main": [
+        [
+          {
+            "node": "¿Hueco válido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

@@ -1,0 +1,803 @@
+{
+  "name": "Fisio Movimiento · API de reservas",
+  "nodes": [
+    {
+      "id": "581c58fe-7c9c-4d3e-8646-af7f9ae53bdc",
+      "name": "POST reservas-api",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "reservas-api",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://tu-clinica.es,http://localhost:8040"
+        }
+      },
+      "webhookId": "acaefccb-240a-4290-a27e-353873df7001"
+    },
+    {
+      "id": "41e85eaa-4647-443d-9b34-f6ade4a36672",
+      "name": "Validar petición",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Servicios y días que se pueden pedir. Deben coincidir con «Crear reserva» y con config.js de la página.\nconst SERVICIOS = ['Fisioterapia general', 'Fisioterapia deportiva', 'Suelo pélvico', 'Punción seca', 'Pilates terapéutico', 'Primera valoración'];\nconst ZONA = 'Europe/Madrid';\nconst DIAS_VISTA = 30;\nconst DIAS_LABORABLES = [1, 2, 3, 4, 5];\n\nconst b = $input.first().json.body || {};\nconst limpiar = function (v, max) { return String(v == null ? '' : v).replace(/[<>]/g, '').trim().slice(0, max); };\nconst accion = limpiar(b.accion, 20).toLowerCase();\nconst r = {\n  accion: accion,\n  hueco: limpiar(b.hueco, 16),\n  servicio: limpiar(b.servicio, 80),\n  nombre: limpiar(b.nombre, 80),\n  email: limpiar(b.email, 120).toLowerCase(),\n  telefono: limpiar(b.telefono, 20).replace(/[^0-9+]/g, ''),\n  dia: limpiar(b.dia, 10),\n  franja: limpiar(b.franja, 12).toLowerCase(),\n  privacidad: b.privacidad === true || b.privacidad === 'true' || b.privacidad === 'on'\n};\nlet error = '';\nif (limpiar(b.website, 200)) error = 'spam';\nelse if (['huecos', 'reservar', 'apuntarse'].indexOf(accion) < 0) error = 'accion';\nelse if (accion !== 'huecos') {\n  if (SERVICIOS.indexOf(r.servicio) < 0) error = 'servicio';\n  else if (r.nombre.length < 2) error = 'nombre';\n  else if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(r.email)) error = 'email';\n  else if (r.telefono && r.telefono.replace(/\\D/g, '').length < 9) error = 'telefono';\n  else if (!r.privacidad) error = 'privacidad';\n  else if (accion === 'reservar' && !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/.test(r.hueco)) error = 'hueco';\n  else if (accion === 'apuntarse') {\n    const d = DateTime.fromISO(r.dia, { zone: ZONA });\n    const hoy = DateTime.now().setZone(ZONA).startOf('day');\n    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(r.dia) || !d.isValid || d < hoy || d > hoy.plus({ days: DIAS_VISTA }) || DIAS_LABORABLES.indexOf(d.weekday) < 0) error = 'dia';\n    else if (['manana', 'tarde', 'cualquiera'].indexOf(r.franja) < 0) error = 'franja';\n  }\n}\nconst MENSAJES = {\n  spam: 'No hemos podido procesar la petición.',\n  accion: 'Petición no válida.',\n  servicio: 'Elige un servicio de la lista.',\n  nombre: 'Escribe tu nombre.',\n  email: 'Escribe un email válido: te enviaremos ahí la confirmación.',\n  telefono: 'El teléfono debe tener al menos 9 cifras.',\n  privacidad: 'Tienes que aceptar la política de privacidad.',\n  hueco: 'Elige un día y una hora.',\n  dia: 'Elige un día laborable de los próximos 30 días.',\n  franja: 'Elige mañana, tarde o cualquier hora.'\n};\nr.ruta = error ? 'error' : accion;\nr.error = error;\nr.mensaje = error ? MENSAJES[error] : '';\nreturn [{ json: r }];"
+      }
+    },
+    {
+      "id": "4d1950dc-2513-4d84-8382-d9fcd816f68b",
+      "name": "Según la acción",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        440,
+        400
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "huecos",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.ruta }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "huecos"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "reservar",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.ruta }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "reservar"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "apuntarse",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.ruta }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "apuntarse"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "error",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.ruta }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "error"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ef34e2e2-b9ca-41d1-99cb-1264deb98ffa",
+      "name": "Responder: petición no válida",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        700,
+        800
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: $json.error, message: $json.mensaje }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      }
+    },
+    {
+      "id": "3dc07454-782b-4f70-9d31-72a2eb3add89",
+      "name": "Reservas confirmadas próximas",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        700,
+        100
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_RESERVAS",
+          "cachedResultName": "reservas"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "estado",
+              "condition": "eq",
+              "keyValue": "confirmada"
+            },
+            {
+              "keyName": "inicio",
+              "condition": "gte",
+              "keyValue": "={{ $now.startOf(\"day\").toISO() }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "49e161e8-c7a8-45ed-83a6-6ada8610b2de",
+      "name": "Huecos ofrecidos a la lista",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        100
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_LISTA_ESPERA",
+          "cachedResultName": "lista_espera"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "estado",
+              "condition": "eq",
+              "keyValue": "ofrecido"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "f4319a5a-5655-4a0c-bc5b-1716d3afab28",
+      "name": "Calcular huecos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// CONFIGURACIÓN DEL HORARIO (igual que en «Crear reserva»).\nconst H = {\n  zona: 'Europe/Madrid',\n  dias: [1, 2, 3, 4, 5],\n  horas: ['09:00', '10:00', '11:00', '12:00', '13:00', '16:00', '17:00', '18:00', '19:00'],\n  antelacionMinHoras: 2,\n  diasVista: 30,\n  festivos: []\n};\nconst ocupados = {};\n$('Reservas confirmadas próximas').all().forEach(function (it) { if (it.json.hueco) ocupados[it.json.hueco] = true; });\nconst ahora = DateTime.now().setZone(H.zona);\n$('Huecos ofrecidos a la lista').all().forEach(function (it) {\n  const caduca = it.json.oferta_caduca_en ? DateTime.fromISO(String(it.json.oferta_caduca_en)) : null;\n  if (it.json.hueco_ofrecido && caduca && caduca > ahora) ocupados[it.json.hueco_ofrecido] = true;\n});\nconst minimo = ahora.plus({ hours: H.antelacionMinHoras });\nconst dias = [];\nfor (let i = 0; i <= H.diasVista; i++) {\n  const d = ahora.startOf('day').plus({ days: i });\n  if (H.dias.indexOf(d.weekday) < 0 || H.festivos.indexOf(d.toISODate()) >= 0) continue;\n  const huecos = H.horas.map(function (h) {\n    const clave = d.toISODate() + 'T' + h;\n    const ini = DateTime.fromISO(clave, { zone: H.zona });\n    return { hueco: clave, hora: h, libre: ini >= minimo && !ocupados[clave] };\n  });\n  dias.push({ fecha: d.toISODate(), libres: huecos.filter(function (x) { return x.libre; }).length, huecos: huecos });\n}\nreturn [{ json: { ok: true, generado: ahora.toISO(), dias: dias } }];"
+      }
+    },
+    {
+      "id": "72a61883-1e89-4fc4-81ce-acdc40c01a2e",
+      "name": "Responder huecos",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1360,
+        100
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "54cd09bd-8ac4-4df9-9291-9944bdd526e9",
+      "name": "Crear reserva",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        700,
+        350
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_WORKFLOW_CREAR_RESERVA",
+          "cachedResultName": "Fisio Movimiento · Crear reserva (subworkflow)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "hueco": "={{ $json.hueco }}",
+            "servicio": "={{ $json.servicio }}",
+            "nombre": "={{ $json.nombre }}",
+            "email": "={{ $json.email }}",
+            "telefono": "={{ $json.telefono }}",
+            "origen": "web",
+            "notas": ""
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "hueco",
+              "displayName": "hueco",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "servicio",
+              "displayName": "servicio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "nombre",
+              "displayName": "nombre",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "origen",
+              "displayName": "origen",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notas",
+              "displayName": "notas",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "bc3bef9e-9d06-41e1-b72a-868177a52609",
+      "name": "Responder reserva",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        920,
+        350
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.ok ? { ok: true, hueco: $json.hueco, fecha_texto: $json.fecha_texto, servicio: $json.servicio } : { ok: false, error: $json.motivo, message: ({ ocupado: \"Ese hueco acaba de ocuparse. Elige otra hora.\", demasiado_pronto: \"Ese hueco ya no se puede reservar online. Elige otra hora.\", demasiado_lejos: \"Solo se puede reservar con 30 días de antelación.\" })[$json.motivo] || \"No hemos podido reservar ese hueco. Elige otra hora.\" }) }}",
+        "options": {
+          "responseCode": "={{ $json.ok ? 200 : ($json.motivo === \"ocupado\" ? 409 : 400) }}"
+        }
+      }
+    },
+    {
+      "id": "9e979e14-6c87-4d06-a5f3-ec295a890cf2",
+      "name": "¿Ya está en la lista?",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        700,
+        580
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_LISTA_ESPERA",
+          "cachedResultName": "lista_espera"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email",
+              "condition": "eq",
+              "keyValue": "={{ $json.email }}"
+            },
+            {
+              "keyName": "dia",
+              "condition": "eq",
+              "keyValue": "={{ $json.dia }}"
+            },
+            {
+              "keyName": "estado",
+              "condition": "eq",
+              "keyValue": "esperando"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "086a36b6-4acd-446a-91e6-29cfaf50a618",
+      "name": "¿Repetido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        920,
+        580
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "b9ac7952-7df7-4c59-b064-1a2ff45a4d3b",
+      "name": "Apuntar en la lista de espera",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1140,
+        680
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_LISTA_ESPERA",
+          "cachedResultName": "lista_espera"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "servicio": "={{ $('Validar petición').item.json.servicio }}",
+            "dia": "={{ $('Validar petición').item.json.dia }}",
+            "franja": "={{ $('Validar petición').item.json.franja }}",
+            "nombre": "={{ $('Validar petición').item.json.nombre }}",
+            "email": "={{ $('Validar petición').item.json.email }}",
+            "telefono": "={{ $('Validar petición').item.json.telefono }}",
+            "estado": "esperando",
+            "token_oferta": "",
+            "hueco_ofrecido": "",
+            "huecos_descartados": "",
+            "notas": ""
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "servicio",
+              "displayName": "servicio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "dia",
+              "displayName": "dia",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "franja",
+              "displayName": "franja",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "nombre",
+              "displayName": "nombre",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "estado",
+              "displayName": "estado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "token_oferta",
+              "displayName": "token_oferta",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hueco_ofrecido",
+              "displayName": "hueco_ofrecido",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "huecos_descartados",
+              "displayName": "huecos_descartados",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notas",
+              "displayName": "notas",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1850cacd-340d-4436-8453-6d97fe56efca",
+      "name": "Confirmar alta en la lista",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1360,
+        680
+      ],
+      "parameters": {
+        "operation": "send",
+        "fromEmail": "Fisio Movimiento <hola@tu-clinica.es>",
+        "toEmail": "={{ $('Validar petición').item.json.email }}",
+        "subject": "Estás en la lista de espera de Fisio Movimiento",
+        "emailFormat": "html",
+        "html": "=<div style=\"font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#1f2a2e;max-width:560px\"><h2 style=\"margin:0 0 12px;color:#2f5d50\">Te avisaremos si se libera un hueco</h2><p>Hola, {{ $('Validar petición').item.json.nombre }}:</p><p>Te hemos apuntado a la lista de espera para <b>{{ $('Validar petición').item.json.servicio }}</b> el <b>{{ DateTime.fromISO($('Validar petición').item.json.dia).setLocale(\"es\").toFormat(\"cccc d 'de' LLLL\") }}</b> ({{ { manana: \"por la mañana\", tarde: \"por la tarde\", cualquiera: \"a cualquier hora\" }[$('Validar petición').item.json.franja] }}).</p><p>Si alguien cancela, te escribiremos por orden de llegada. Tendrás <b>2 horas</b> para aceptar el hueco desde el enlace del email; después pasará a la siguiente persona.</p><p>Un saludo,<br>Fisio Movimiento</p></div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "smtp": {
+          "id": "CONFIGURAR_ID_CREDENCIAL_SMTP",
+          "name": "SMTP de la clínica"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "6a6d5f62-dfc7-4968-b6fe-ff007d93e82b"
+    },
+    {
+      "id": "def04ddb-5f8d-43d1-b819-11e9b3ebe17c",
+      "name": "Responder alta en la lista",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1580,
+        580
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, dia: $('Validar petición').item.json.dia, franja: $('Validar petición').item.json.franja, repetido: $('¿Ya está en la lista?').item.json.id ? true : false }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "92b32eee-283e-4ea1-a9be-3fff03c84a0d",
+      "name": "Nota",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        120
+      ],
+      "parameters": {
+        "content": "## API de reservas (página `reservar/`)\nUna sola URL con `accion`:\n- `huecos`: devuelve los días y horas libres (sin datos de otros pacientes).\n- `reservar`: llama a «Crear reserva» (insertar y comprobar). 409 si otra persona se adelantó.\n- `apuntarse`: alta en la lista de espera por día y franja.\n\nCORS: solo GitHub Pages y `localhost:8040`.",
+        "color": 7,
+        "width": 460,
+        "height": 230
+      }
+    }
+  ],
+  "connections": {
+    "POST reservas-api": {
+      "main": [
+        [
+          {
+            "node": "Validar petición",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reservas confirmadas próximas": {
+      "main": [
+        [
+          {
+            "node": "Huecos ofrecidos a la lista",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Huecos ofrecidos a la lista": {
+      "main": [
+        [
+          {
+            "node": "Calcular huecos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular huecos": {
+      "main": [
+        [
+          {
+            "node": "Responder huecos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Según la acción": {
+      "main": [
+        [
+          {
+            "node": "Reservas confirmadas próximas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Crear reserva",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "¿Ya está en la lista?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder: petición no válida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear reserva": {
+      "main": [
+        [
+          {
+            "node": "Responder reserva",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Repetido?": {
+      "main": [
+        [
+          {
+            "node": "Responder alta en la lista",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Apuntar en la lista de espera",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apuntar en la lista de espera": {
+      "main": [
+        [
+          {
+            "node": "Confirmar alta en la lista",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirmar alta en la lista": {
+      "main": [
+        [
+          {
+            "node": "Responder alta en la lista",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Ya está en la lista?": {
+      "main": [
+        [
+          {
+            "node": "¿Repetido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar petición": {
+      "main": [
+        [
+          {
+            "node": "Según la acción",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

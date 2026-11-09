@@ -1,0 +1,560 @@
+{
+  "name": "Fisio Movimiento · Cancelar reserva (subworkflow)",
+  "nodes": [
+    {
+      "id": "7c2fa1ea-ee89-4f94-a86b-6fc3d6870ff7",
+      "name": "Al cancelar una reserva",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "reserva_id",
+              "type": "number"
+            },
+            {
+              "name": "quien",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "22e6d1fb-0d32-4cfc-855e-5764f390d429",
+      "name": "Buscar reserva",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_RESERVAS",
+          "cachedResultName": "reservas"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.reserva_id }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "cb87a0da-8b5e-4048-8f86-15b093328387",
+      "name": "Comprobar si se puede cancelar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const r = $input.first().json;\nconst quien = $('Al cancelar una reserva').first().json.quien === 'clinica' ? 'clinica' : 'paciente';\nconst ini = r.hueco ? DateTime.fromISO(r.hueco, { zone: 'Europe/Madrid' }) : null;\nlet motivo = '';\nif (!r.id) motivo = 'no_encontrada';\nelse if (r.estado !== 'confirmada') motivo = 'ya_cancelada';\nelse if (!ini || !ini.isValid || ini < DateTime.now()) motivo = 'pasada';\nreturn [{ json: {\n  puede: !motivo,\n  motivo: motivo,\n  quien: quien,\n  id: r.id || 0,\n  hueco: r.hueco || '',\n  nombre: r.nombre || '',\n  email: r.email || '',\n  servicio: r.servicio || '',\n  gcal_event_id: r.gcal_event_id || '',\n  fecha_texto: ini && ini.isValid ? ini.setLocale('es').toFormat(\"cccc d 'de' LLLL 'a las' HH:mm\") : ''\n} }];"
+      }
+    },
+    {
+      "id": "e321c5a9-d63e-40ab-9b65-60ecaf6edc86",
+      "name": "¿Se puede cancelar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.puede }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "26282adb-2b5f-4267-b08c-24f595af09dd",
+      "name": "Marcar como cancelada",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        200
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_RESERVAS",
+          "cachedResultName": "reservas"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            },
+            {
+              "keyName": "estado",
+              "condition": "eq",
+              "keyValue": "confirmada"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "estado": "cancelada",
+            "cancelada_en": "={{ $now.toUTC().toISO() }}",
+            "notas": "={{ $json.quien === \"clinica\" ? \"Cancelada desde el panel\" : \"Cancelada por el paciente\" }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "estado",
+              "displayName": "estado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cancelada_en",
+              "displayName": "cancelada_en",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notas",
+              "displayName": "notas",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "30f0a6ad-f8b3-4c26-940e-04727407c4e7",
+      "name": "Borrar de Google Calendar",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1100,
+        200
+      ],
+      "parameters": {
+        "resource": "event",
+        "operation": "delete",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_CALENDARIO"
+        },
+        "eventId": "={{ $('Comprobar si se puede cancelar').item.json.gcal_event_id || 'sin-evento' }}",
+        "options": {
+          "sendUpdates": "none"
+        }
+      },
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "CONFIGURAR_ID_CREDENCIAL_GOOGLE_CALENDAR",
+          "name": "Google Calendar de la clínica"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "173a6950-8298-4d47-948d-b97c473a4c8a",
+      "name": "¿Tiene email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Comprobar si se puede cancelar').item.json.email }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "f1cf5609-bc38-4974-bb13-0226838372dd",
+      "name": "Confirmar cancelación al paciente",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1540,
+        100
+      ],
+      "parameters": {
+        "operation": "send",
+        "fromEmail": "Fisio Movimiento <hola@tu-clinica.es>",
+        "toEmail": "={{ $('Comprobar si se puede cancelar').item.json.email }}",
+        "subject": "=Cita cancelada: {{ $('Comprobar si se puede cancelar').item.json.fecha_texto }}",
+        "emailFormat": "html",
+        "html": "=<div style=\"font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#1f2a2e;max-width:560px\"><h2 style=\"margin:0 0 12px;color:#2f5d50\">Tu cita está cancelada</h2><p>Hola, {{ $('Comprobar si se puede cancelar').item.json.nombre }}:</p><p>Hemos cancelado tu cita del <b>{{ $('Comprobar si se puede cancelar').item.json.fecha_texto }}</b> ({{ $('Comprobar si se puede cancelar').item.json.servicio }}). Gracias por avisar: el hueco pasa a la lista de espera.</p><p>Si quieres otra cita, puedes reservarla cuando quieras en <a href=\"https://tu-clinica.es/reservas/reservar/\">nuestra página de reservas</a>.</p><p>Un saludo,<br>Fisio Movimiento</p></div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "smtp": {
+          "id": "CONFIGURAR_ID_CREDENCIAL_SMTP",
+          "name": "SMTP de la clínica"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "d370811f-3bf2-48c4-b8bc-e342a345dd80"
+    },
+    {
+      "id": "5e8dc893-8ed3-44e0-b8ef-d6b78fbd7a72",
+      "name": "Avisar a la clínica",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1760,
+        200
+      ],
+      "parameters": {
+        "operation": "send",
+        "fromEmail": "Fisio Movimiento <hola@tu-clinica.es>",
+        "toEmail": "hola@tu-clinica.es",
+        "subject": "=Cancelación: {{ $('Comprobar si se puede cancelar').item.json.fecha_texto }} · {{ $('Comprobar si se puede cancelar').item.json.nombre }}",
+        "emailFormat": "html",
+        "html": "=<div style=\"font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#1f2a2e;max-width:560px\"><h2 style=\"margin:0 0 12px\">Cita cancelada ({{ $('Comprobar si se puede cancelar').item.json.quien === \"clinica\" ? \"desde el panel\" : \"por el paciente\" }})</h2><p><b>Cuándo:</b> {{ $('Comprobar si se puede cancelar').item.json.fecha_texto }}</p><p><b>Paciente:</b> {{ $('Comprobar si se puede cancelar').item.json.nombre }} · {{ $('Comprobar si se puede cancelar').item.json.servicio }}</p><p>El evento se ha quitado del calendario y el hueco se ofrece ahora a la lista de espera de ese día, si hay alguien apuntado.</p></div>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "smtp": {
+          "id": "CONFIGURAR_ID_CREDENCIAL_SMTP",
+          "name": "SMTP de la clínica"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "575da573-06f7-4d27-8e8f-ab451d7bfcf0"
+    },
+    {
+      "id": "907619ec-0c8e-44f1-b628-3709dad0d533",
+      "name": "Ofrecer hueco a la lista",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1980,
+        200
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_WORKFLOW_OFRECER_HUECO",
+          "cachedResultName": "Fisio Movimiento · Ofrecer hueco a la lista de espera (subworkflow)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "hueco": "={{ $('Comprobar si se puede cancelar').item.json.hueco }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "hueco",
+              "displayName": "hueco",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "636f5e7a-5f9c-4221-8a01-b4c1c83d5f72",
+      "name": "Resultado: cancelada",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2200,
+        200
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ok",
+              "name": "ok",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "motivo",
+              "name": "motivo",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "fecha_texto",
+              "name": "fecha_texto",
+              "value": "={{ $('Comprobar si se puede cancelar').item.json.fecha_texto }}",
+              "type": "string"
+            },
+            {
+              "id": "ofrecido",
+              "name": "ofrecido",
+              "value": "={{ $json.ofrecido === true }}",
+              "type": "boolean"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e5e55209-7d77-4501-9f1f-cb03376e89e1",
+      "name": "Resultado: no se puede",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        420
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ok",
+              "name": "ok",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "motivo",
+              "name": "motivo",
+              "value": "={{ $json.motivo }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "12cf0e94-730f-4101-9cd7-fc8f73e0ba63",
+      "name": "Nota",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        180,
+        40
+      ],
+      "parameters": {
+        "content": "## Cancelar reserva (subworkflow)\nLo usan el enlace del email (`gestionar/`) y el panel de recepción.\nSolo cancela reservas confirmadas y futuras. Quita el evento de Google Calendar (si falla, sigue), avisa por email y llama a «Ofrecer hueco» para la lista de espera.",
+        "color": 7,
+        "width": 600,
+        "height": 180
+      }
+    }
+  ],
+  "connections": {
+    "Al cancelar una reserva": {
+      "main": [
+        [
+          {
+            "node": "Buscar reserva",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar reserva": {
+      "main": [
+        [
+          {
+            "node": "Comprobar si se puede cancelar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar como cancelada": {
+      "main": [
+        [
+          {
+            "node": "Borrar de Google Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirmar cancelación al paciente": {
+      "main": [
+        [
+          {
+            "node": "Avisar a la clínica",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Avisar a la clínica": {
+      "main": [
+        [
+          {
+            "node": "Ofrecer hueco a la lista",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ofrecer hueco a la lista": {
+      "main": [
+        [
+          {
+            "node": "Resultado: cancelada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Tiene email?": {
+      "main": [
+        [
+          {
+            "node": "Confirmar cancelación al paciente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Avisar a la clínica",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Borrar de Google Calendar": {
+      "main": [
+        [
+          {
+            "node": "¿Tiene email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Se puede cancelar?": {
+      "main": [
+        [
+          {
+            "node": "Marcar como cancelada",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resultado: no se puede",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comprobar si se puede cancelar": {
+      "main": [
+        [
+          {
+            "node": "¿Se puede cancelar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

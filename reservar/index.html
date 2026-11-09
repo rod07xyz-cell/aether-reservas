@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pide tu cita · Fisio Movimiento</title>
+  <meta name="description" content="Reserva tu cita de fisioterapia online: elige servicio, día y hora. Si no hay hueco, apúntate a la lista de espera.">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%231F3A33'/%3E%3Ctext x='32' y='43' font-family='Palatino,Georgia,serif' font-size='32' text-anchor='middle' fill='%23C9A46A'%3EF%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="../comun/estilos.css?v=2">
+</head>
+<body>
+<div class="marco">
+  <aside class="rail">
+    <div class="rail__marca">
+      <span class="rail__sello" data-sello aria-hidden="true">F</span>
+      <div>
+        <p class="rail__nombre" data-clinica>Fisio Movimiento</p>
+        <p class="rail__dato" data-direccion></p>
+      </div>
+    </div>
+    <div class="resguardo" aria-live="polite">
+      <p class="resguardo__titulo">Tu cita</p>
+      <ul class="resguardo__lista">
+        <li><span>Servicio</span><strong id="rServicio" class="vacio">Sin elegir</strong></li>
+        <li><span>Día</span><strong id="rDia" class="vacio">Sin elegir</strong></li>
+        <li><span>Hora</span><strong id="rHora" class="vacio">Sin elegir</strong></li>
+      </ul>
+    </div>
+    <p class="rail__pie">¿Prefieres llamar? <span data-telefono></span><br><a data-privacidad href="#">Política de privacidad</a></p>
+  </aside>
+
+  <main class="contenido">
+    <p class="demo-aviso" data-demo hidden>Modo demostración: los huecos son inventados y no se guarda nada.</p>
+
+    <!-- Reserva -->
+    <section data-vista="reserva">
+      <h1>Pide tu cita</h1>
+      <p class="entradilla">Elige el servicio, el día y la hora. Te enviaremos la confirmación por email, con un enlace para cancelar si lo necesitas.</p>
+
+      <div class="paso" id="pasoServicio">
+        <div class="paso__cabecera"><span class="paso__num">1</span><h2>¿Qué necesitas?</h2></div>
+        <fieldset class="servicios" id="servicios">
+          <legend class="sr-only">Servicio</legend>
+        </fieldset>
+      </div>
+
+      <div class="paso paso--bloqueado" id="pasoHora" aria-disabled="true">
+        <div class="paso__cabecera"><span class="paso__num">2</span><h2>Día y hora</h2></div>
+        <div class="dias-cabecera">
+          <p class="dias-mes" id="diasMes"></p>
+          <div class="dias-flechas">
+            <button class="flecha" type="button" id="diasAtras" aria-label="Días anteriores">
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="flecha" type="button" id="diasAdelante" aria-label="Días siguientes">
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="dias" id="dias" role="group" aria-label="Días disponibles"><p class="cargando">Buscando huecos libres…</p></div>
+        <div id="horas" aria-live="polite"></div>
+        <p class="espera-enlace" id="esperaEnlace" hidden>¿No te viene ninguna hora? <button type="button" class="enlace-boton" data-abrir-espera>Apúntate a la lista de espera de este día</button> y te avisaremos si alguien cancela.</p>
+        <p class="aviso aviso--error" id="errorHuecos" hidden></p>
+      </div>
+
+      <div class="paso paso--bloqueado" id="pasoDatos" aria-disabled="true">
+        <div class="paso__cabecera"><span class="paso__num">3</span><h2>Tus datos</h2></div>
+        <form id="formReserva" class="campos" novalidate>
+          <div class="campo">
+            <label for="rNombre">Nombre y apellidos</label>
+            <input type="text" id="rNombre" name="nombre" autocomplete="name" maxlength="80" required>
+            <span class="error-campo" hidden></span>
+          </div>
+          <div class="campo">
+            <label for="rEmail">Email</label>
+            <input type="email" id="rEmail" name="email" autocomplete="email" inputmode="email" maxlength="120" required>
+            <span class="error-campo" hidden></span>
+          </div>
+          <div class="campo">
+            <label for="rTelefono">Teléfono <span class="opcional">(opcional, por si tenemos que avisarte)</span></label>
+            <input type="tel" id="rTelefono" name="telefono" autocomplete="tel" inputmode="tel" maxlength="20">
+            <span class="error-campo" hidden></span>
+          </div>
+          <div class="trampa" aria-hidden="true">
+            <label for="rWeb">No rellenes este campo</label>
+            <input type="text" id="rWeb" name="website" tabindex="-1" autocomplete="off">
+          </div>
+          <div class="campo campo--check">
+            <input type="checkbox" id="rPrivacidad" name="privacidad" required>
+            <label for="rPrivacidad">He leído la <a data-privacidad href="#" target="_blank" rel="noopener">política de privacidad</a>. Usaremos tus datos solo para gestionar tu cita.</label>
+          </div>
+          <span class="error-campo" id="rPrivacidadError" hidden></span>
+          <button class="boton boton--ancho" type="submit" id="rEnviar">Confirmar cita</button>
+          <p class="aviso aviso--error" id="errorReserva" role="alert" hidden></p>
+        </form>
+      </div>
+    </section>
+
+    <!-- Lista de espera -->
+    <section data-vista="espera" hidden>
+      <button type="button" class="paso__cambiar" data-volver style="margin:0 0 16px">Volver a elegir hora</button>
+      <div class="bloque bloque--espera">
+        <h1 class="bloque__titulo" id="esperaTitulo">Lista de espera</h1>
+        <p class="bloque__texto">Si alguien cancela ese día, te escribiremos por orden de llegada. Tendrás <strong id="esperaPlazo">2 horas</strong> para aceptar el hueco desde el email; después pasará a la siguiente persona.</p>
+        <form id="formEspera" class="campos" novalidate>
+          <fieldset class="franjas">
+            <legend>¿A qué hora te viene bien?</legend>
+            <label class="chip"><input type="radio" name="franja" value="cualquiera" checked><span>A cualquier hora</span></label>
+            <label class="chip"><input type="radio" name="franja" value="manana"><span>Por la mañana</span></label>
+            <label class="chip"><input type="radio" name="franja" value="tarde"><span>Por la tarde</span></label>
+          </fieldset>
+          <p class="nota" id="esperaServicio"></p>
+          <div class="campo">
+            <label for="eNombre">Nombre y apellidos</label>
+            <input type="text" id="eNombre" name="nombre" autocomplete="name" maxlength="80" required>
+            <span class="error-campo" hidden></span>
+          </div>
+          <div class="campo">
+            <label for="eEmail">Email</label>
+            <input type="email" id="eEmail" name="email" autocomplete="email" inputmode="email" maxlength="120" required>
+            <span class="error-campo" hidden></span>
+          </div>
+          <div class="campo">
+            <label for="eTelefono">Teléfono <span class="opcional">(opcional)</span></label>
+            <input type="tel" id="eTelefono" name="telefono" autocomplete="tel" inputmode="tel" maxlength="20">
+            <span class="error-campo" hidden></span>
+          </div>
+          <div class="trampa" aria-hidden="true">
+            <label for="eWeb">No rellenes este campo</label>
+            <input type="text" id="eWeb" name="website" tabindex="-1" autocomplete="off">
+          </div>
+          <div class="campo campo--check">
+            <input type="checkbox" id="ePrivacidad" name="privacidad" required>
+            <label for="ePrivacidad">He leído la <a data-privacidad href="#" target="_blank" rel="noopener">política de privacidad</a>. Usaremos tus datos solo para avisarte de un hueco libre.</label>
+          </div>
+          <span class="error-campo" id="ePrivacidadError" hidden></span>
+          <button class="boton boton--laton boton--ancho" type="submit" id="eEnviar">Apuntarme a la lista de espera</button>
+          <p class="aviso aviso--error" id="errorEspera" role="alert" hidden></p>
+        </form>
+      </div>
+    </section>
+
+    <!-- Reserva confirmada -->
+    <section data-vista="hecho" class="hecho" hidden>
+      <div class="hecho__sello" aria-hidden="true">
+        <svg width="30" height="30" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h1 tabindex="-1">Cita confirmada</h1>
+      <p class="entradilla">Te hemos enviado un email con los detalles y un enlace para cancelar si no puedes venir.</p>
+      <dl class="ticket">
+        <dt>Cuándo</dt><dd id="hCuando"></dd>
+        <dt>Servicio</dt><dd id="hServicio"></dd>
+        <dt>Dónde</dt><dd data-direccion></dd>
+      </dl>
+      <p class="nota">¿No te llega el email? Revisa la carpeta de correo no deseado o llámanos al <span data-telefono></span>.</p>
+      <div class="botones"><a class="boton boton--suave" href="./">Pedir otra cita</a></div>
+    </section>
+
+    <!-- Alta en la lista de espera -->
+    <section data-vista="espera-hecha" class="hecho" hidden>
+      <div class="hecho__sello" aria-hidden="true">
+        <svg width="30" height="30" viewBox="0 0 24 24"><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2.2"/></svg>
+      </div>
+      <h1 tabindex="-1">Estás en la lista de espera</h1>
+      <p class="entradilla" id="ehTexto"></p>
+      <p class="nota">Te hemos enviado un email de confirmación. Si se libera un hueco, el aviso llegará a ese mismo correo.</p>
+      <div class="botones"><a class="boton boton--suave" href="./">Volver al calendario</a></div>
+    </section>
+  </main>
+</div>
+
+<script src="../comun/config.js?v=2"></script>
+<script src="../comun/comun.js?v=2"></script>
+<script src="reservar.js?v=2"></script>
+</body>
+</html>

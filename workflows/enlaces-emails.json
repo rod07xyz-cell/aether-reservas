@@ -1,0 +1,1125 @@
+{
+  "name": "Fisio Movimiento · Enlaces de los emails (reservas y ofertas)",
+  "nodes": [
+    {
+      "id": "e912a6f8-be52-4ace-bad4-2a5efbd2212b",
+      "name": "POST reservas-enlace",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "reservas-enlace",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://tu-clinica.es,http://localhost:8040"
+        }
+      },
+      "webhookId": "a5c58acc-90e7-4548-af0f-c608a7201990"
+    },
+    {
+      "id": "c0893760-7a33-4672-bd71-48948aa4786c",
+      "name": "Validar enlace",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const b = $input.first().json.body || {};\nconst accion = String(b.accion || '').toLowerCase();\nconst token = String(b.token || '').trim().toLowerCase();\nconst ACCIONES = { ver_reserva: 'reserva', cancelar: 'reserva', ver_oferta: 'oferta', aceptar: 'oferta', rechazar: 'oferta' };\nconst valido = !!ACCIONES[accion] && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(token);\nreturn [{ json: { valido: valido, accion: accion, tipo: ACCIONES[accion] || '', token: valido ? token : '', seguir: b.seguir !== false && b.seguir !== 'false' } }];"
+      }
+    },
+    {
+      "id": "6a0dc7ac-55c9-44d4-8d56-f07212b43faa",
+      "name": "¿Enlace bien formado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.valido }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "25ea5e42-8741-4934-a972-7e5b825ac4e0",
+      "name": "Responder: enlace no válido",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        660,
+        620
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"ok\": false, \"error\": \"not_found\", \"message\": \"Este enlace no es válido.\" }",
+        "options": {
+          "responseCode": 404
+        }
+      }
+    },
+    {
+      "id": "07851152-fcc8-4c16-8972-8d58f2f36f0c",
+      "name": "Reserva de ese enlace",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_RESERVAS",
+          "cachedResultName": "reservas"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "token",
+              "condition": "eq",
+              "keyValue": "={{ $json.tipo === \"reserva\" ? $json.token : \"-\" }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "a95719ae-c5b1-4835-b86f-cd3929a90b2f",
+      "name": "Oferta de ese enlace",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_LISTA_ESPERA",
+          "cachedResultName": "lista_espera"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "token_oferta",
+              "condition": "eq",
+              "keyValue": "={{ $('Validar enlace').item.json.tipo === 'oferta' ? $('Validar enlace').item.json.token : '-' }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "8c71ba80-3a87-4af0-b906-4e591e618ef8",
+      "name": "Decidir qué hacer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Abrir el enlace solo hace «ver_…» (lectura). Cancelar, aceptar y rechazar llegan desde un botón de la página.\nconst ZONA = 'Europe/Madrid';\nconst v = $('Validar enlace').first().json;\nconst r = $('Reserva de ese enlace').first().json;\nconst o = $('Oferta de ese enlace').first().json;\nconst ahora = DateTime.now();\nconst texto = function (h) { const d = DateTime.fromISO(String(h || ''), { zone: ZONA }); return d.isValid ? d.setLocale('es').toFormat(\"cccc d 'de' LLLL 'a las' HH:mm\") : ''; };\nconst pila = function (n) { return String(n || '').split(' ')[0]; };\nconst salida = { ruta: 'responder', codigo: 200, respuesta: {}, accion: v.accion, seguir: v.seguir };\nconst fallo = function (codigo, error, mensaje) { salida.codigo = codigo; salida.respuesta = { ok: false, error: error, message: mensaje }; };\n\nif (v.tipo === 'reserva') {\n  if (!r.id) fallo(404, 'not_found', 'Este enlace no es válido.');\n  else {\n    const futura = DateTime.fromISO(r.hueco, { zone: ZONA }) > ahora;\n    const cancelable = r.estado === 'confirmada' && futura;\n    if (v.accion === 'ver_reserva') {\n      salida.respuesta = { ok: true, tipo: 'reserva', estado: r.estado, fecha_texto: texto(r.hueco), hueco: r.hueco, servicio: r.servicio, nombre: pila(r.nombre), cancelable: cancelable };\n    } else if (!cancelable) {\n      fallo(409, r.estado === 'confirmada' ? 'pasada' : 'ya_cancelada', r.estado === 'confirmada' ? 'Esta cita ya ha pasado.' : 'Esta cita ya estaba cancelada.');\n    } else {\n      salida.ruta = 'cancelar';\n      salida.reserva_id = r.id;\n    }\n  }\n} else {\n  if (!o.id) fallo(404, 'not_found', 'Este enlace ya se ha usado o no es válido.');\n  else {\n    const caduca = o.oferta_caduca_en ? DateTime.fromISO(String(o.oferta_caduca_en)) : null;\n    const vigente = o.estado === 'ofrecido' && caduca && caduca > ahora;\n    const desc = String(o.huecos_descartados || '').split(',').filter(function (x) { return x; });\n    if (desc.indexOf(o.hueco_ofrecido) < 0) desc.push(o.hueco_ofrecido);\n    salida.espera_id = o.id;\n    salida.hueco = o.hueco_ofrecido;\n    salida.servicio = o.servicio;\n    salida.nombre = o.nombre;\n    salida.email = o.email;\n    salida.telefono = o.telefono || '';\n    salida.descartados = desc.join(',');\n    salida.fecha_texto = texto(o.hueco_ofrecido);\n    if (v.accion === 'ver_oferta') {\n      salida.respuesta = { ok: true, tipo: 'oferta', vigente: !!vigente, estado: o.estado, fecha_texto: texto(o.hueco_ofrecido), hueco: o.hueco_ofrecido, servicio: o.servicio, nombre: pila(o.nombre), caduca_en: caduca ? caduca.toISO() : '', caduca_texto: caduca ? caduca.setZone(ZONA).setLocale('es').toFormat('HH:mm') : '' };\n    } else if (v.accion === 'aceptar') {\n      if (!vigente) fallo(410, 'expired', 'El plazo para aceptar este hueco ha terminado.');\n      else salida.ruta = 'aceptar';\n    } else {\n      if (o.estado !== 'ofrecido') fallo(409, 'conflict', 'Esta oferta ya no está disponible.');\n      else salida.ruta = 'rechazar';\n    }\n  }\n}\nreturn [{ json: salida }];"
+      }
+    },
+    {
+      "id": "ad0c2149-bd6e-4411-ac41-312162f6f2a9",
+      "name": "Según la acción",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1320,
+        300
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "responder",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.ruta }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "responder"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "cancelar",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.ruta }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "cancelar"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "aceptar",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.ruta }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "aceptar"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "rechazar",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.ruta }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "rechazar"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "19292567-fdab-410f-aed7-37d13a24f412",
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2640,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.respuesta) }}",
+        "options": {
+          "responseCode": "={{ $json.codigo }}"
+        }
+      }
+    },
+    {
+      "id": "10ac8de0-95e8-4f19-bcd6-36fea94a9076",
+      "name": "Cancelar reserva",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1540,
+        100
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_WORKFLOW_CANCELAR_RESERVA",
+          "cachedResultName": "Fisio Movimiento · Cancelar reserva (subworkflow)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "reserva_id": "={{ $json.reserva_id }}",
+            "quien": "paciente"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "reserva_id",
+              "displayName": "reserva_id",
+              "type": "number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "quien",
+              "displayName": "quien",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "edc3cc2a-a005-477a-8403-f131fa1be6f8",
+      "name": "Respuesta: cancelada",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
+        100
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "codigo",
+              "name": "codigo",
+              "value": "={{ $json.ok ? 200 : 409 }}",
+              "type": "number"
+            },
+            {
+              "id": "respuesta",
+              "name": "respuesta",
+              "value": "={{ $json.ok ? { ok: true, fecha_texto: $json.fecha_texto } : { ok: false, error: $json.motivo, message: \"No se ha podido cancelar la cita.\" } }}",
+              "type": "object"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "eae017ca-7f58-4aa1-af1a-1608dd757985",
+      "name": "Crear reserva desde la lista",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1540,
+        300
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_WORKFLOW_CREAR_RESERVA",
+          "cachedResultName": "Fisio Movimiento · Crear reserva (subworkflow)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "hueco": "={{ $json.hueco }}",
+            "servicio": "={{ $json.servicio }}",
+            "nombre": "={{ $json.nombre }}",
+            "email": "={{ $json.email }}",
+            "telefono": "={{ $json.telefono }}",
+            "origen": "lista_espera",
+            "notas": "Desde la lista de espera"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "hueco",
+              "displayName": "hueco",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "servicio",
+              "displayName": "servicio",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "nombre",
+              "displayName": "nombre",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "origen",
+              "displayName": "origen",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notas",
+              "displayName": "notas",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "5b651979-bc23-4a63-a859-11669ee12079",
+      "name": "¿Reservada?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ok }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "1ee82a5f-9363-4b87-b1d6-f657e1b41bf6",
+      "name": "Marcar oferta aceptada",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        240
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_LISTA_ESPERA",
+          "cachedResultName": "lista_espera"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Decidir qué hacer').first().json.espera_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "estado": "aceptada",
+            "token_oferta": "",
+            "reserva_id": "={{ $json.reserva_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "estado",
+              "displayName": "estado",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "token_oferta",
+              "displayName": "token_oferta",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reserva_id",
+              "displayName": "reserva_id",
+              "type": "number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "9732861f-14d8-420a-aa25-b865892969b2",
+      "name": "Respuesta: aceptada",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2200,
+        240
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "codigo",
+              "name": "codigo",
+              "value": 200,
+              "type": "number"
+            },
+            {
+              "id": "respuesta",
+              "name": "respuesta",
+              "value": "={{ { ok: true, fecha_texto: $('Decidir qué hacer').first().json.fecha_texto, servicio: $('Decidir qué hacer').first().json.servicio } }}",
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "c9058e0d-c924-4b92-ac72-89bd6082a581",
+      "name": "Devolver a la lista (hueco perdido)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        420
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_LISTA_ESPERA",
+          "cachedResultName": "lista_espera"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Decidir qué hacer').first().json.espera_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "estado": "esperando",
+            "token_oferta": "",
+            "hueco_ofrecido": "",
+            "huecos_descartados": "={{ $('Decidir qué hacer').first().json.descartados }}",
+            "notas": "={{ \"No se pudo reservar: \" + $json.motivo }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "estado",
+              "displayName": "estado",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "token_oferta",
+              "displayName": "token_oferta",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hueco_ofrecido",
+              "displayName": "hueco_ofrecido",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "huecos_descartados",
+              "displayName": "huecos_descartados",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notas",
+              "displayName": "notas",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "2e971ea7-9a99-415e-9379-bd10d7a6ff4a",
+      "name": "Respuesta: hueco perdido",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2200,
+        420
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "codigo",
+              "name": "codigo",
+              "value": 409,
+              "type": "number"
+            },
+            {
+              "id": "respuesta",
+              "name": "respuesta",
+              "value": "={{ { ok: false, error: \"conflict\", message: \"Lo sentimos: ese hueco ya no está disponible. Sigues en la lista de espera.\" } }}",
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "05053d2d-a2e7-48e0-bd8b-814e4bc3795d",
+      "name": "Marcar oferta rechazada",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        560
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_TABLA_LISTA_ESPERA",
+          "cachedResultName": "lista_espera"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.espera_id }}"
+            },
+            {
+              "keyName": "estado",
+              "condition": "eq",
+              "keyValue": "ofrecido"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "estado": "={{ $json.seguir ? \"esperando\" : \"retirada\" }}",
+            "token_oferta": "",
+            "hueco_ofrecido": "",
+            "huecos_descartados": "={{ $json.descartados }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "estado",
+              "displayName": "estado",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "token_oferta",
+              "displayName": "token_oferta",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hueco_ofrecido",
+              "displayName": "hueco_ofrecido",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "huecos_descartados",
+              "displayName": "huecos_descartados",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "20428f34-39c6-4def-be28-f9afcfa99d15",
+      "name": "Ofrecer al siguiente",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1760,
+        560
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "CONFIGURAR_ID_WORKFLOW_OFRECER_HUECO",
+          "cachedResultName": "Fisio Movimiento · Ofrecer hueco a la lista de espera (subworkflow)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "hueco": "={{ $('Decidir qué hacer').first().json.hueco }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "hueco",
+              "displayName": "hueco",
+              "type": "string",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "84a7def7-20ce-4f1a-9239-282c9a7297e3",
+      "name": "Respuesta: rechazada",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1980,
+        560
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "codigo",
+              "name": "codigo",
+              "value": 200,
+              "type": "number"
+            },
+            {
+              "id": "respuesta",
+              "name": "respuesta",
+              "value": "={{ { ok: true, seguir: $('Decidir qué hacer').first().json.seguir } }}",
+              "type": "object"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bc4363c7-552c-4db4-9ddc-7c77637330d4",
+      "name": "Nota",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        180,
+        80
+      ],
+      "parameters": {
+        "content": "## Enlaces de los emails (`gestionar/` y `oferta/`)\nEl email lleva un token. Abrir la página solo llama a `ver_reserva` o `ver_oferta` (lectura, nada cambia). Las acciones (`cancelar`, `aceptar`, `rechazar`) llegan con POST al pulsar un botón.\n\nEl token de la oferta se borra al aceptar, rechazar o caducar: el enlace sirve una sola vez.",
+        "color": 7,
+        "width": 640,
+        "height": 180
+      }
+    }
+  ],
+  "connections": {
+    "POST reservas-enlace": {
+      "main": [
+        [
+          {
+            "node": "Validar enlace",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reserva de ese enlace": {
+      "main": [
+        [
+          {
+            "node": "Oferta de ese enlace",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Oferta de ese enlace": {
+      "main": [
+        [
+          {
+            "node": "Decidir qué hacer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Según la acción": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cancelar reserva",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Crear reserva desde la lista",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Marcar oferta rechazada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cancelar reserva": {
+      "main": [
+        [
+          {
+            "node": "Respuesta: cancelada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respuesta: cancelada": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar oferta aceptada": {
+      "main": [
+        [
+          {
+            "node": "Respuesta: aceptada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respuesta: aceptada": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Reservada?": {
+      "main": [
+        [
+          {
+            "node": "Marcar oferta aceptada",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Devolver a la lista (hueco perdido)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Devolver a la lista (hueco perdido)": {
+      "main": [
+        [
+          {
+            "node": "Respuesta: hueco perdido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respuesta: hueco perdido": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear reserva desde la lista": {
+      "main": [
+        [
+          {
+            "node": "¿Reservada?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar oferta rechazada": {
+      "main": [
+        [
+          {
+            "node": "Ofrecer al siguiente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ofrecer al siguiente": {
+      "main": [
+        [
+          {
+            "node": "Respuesta: rechazada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respuesta: rechazada": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decidir qué hacer": {
+      "main": [
+        [
+          {
+            "node": "Según la acción",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Enlace bien formado?": {
+      "main": [
+        [
+          {
+            "node": "Reserva de ese enlace",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder: enlace no válido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar enlace": {
+      "main": [
+        [
+          {
+            "node": "¿Enlace bien formado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
